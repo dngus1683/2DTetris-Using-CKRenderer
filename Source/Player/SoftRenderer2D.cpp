@@ -42,7 +42,6 @@ void SoftRenderer::DrawGizmo2D()
 }
 
 // 게임 오브젝트 목록
-static const std::string Tetromino[5] = { "I", "L", "O", "S", "T" };
 
 // 최초 씬 로딩을 담당하는 함수
 void SoftRenderer::LoadScene2D()
@@ -53,7 +52,9 @@ void SoftRenderer::LoadScene2D()
 }
 
 // 게임 로직과 렌더링 로직이 공유하는 변수
-
+Vector2 CurrentPosition = Vector2(0.f, 200.f);
+static float FallingTime = 0.f;
+static float CurrentRotation = 0.f;
 
 // 게임 로직을 담당하는 함수
 void SoftRenderer::Update2D(float InDeltaSeconds)
@@ -63,11 +64,46 @@ void SoftRenderer::Update2D(float InDeltaSeconds)
 	const InputManager& input = g.GetInputManager();
 
 	// 게임 로직의 로컬 변수
-	static float FallingSpeed = 0.f;
+	static float FallingDistance = -10.f;
+	static float MovingSpeed = 300.f;
+	Vector2 InputXDirection = Vector2(input.GetAxis(InputAxis::XAxis), input.GetAxis(InputAxis::YAxis));
+
+	FallingTime += InDeltaSeconds;
+	if (FallingTime >= 2.f)
+	{
+		Vector2 DeltaFallingPosition = Vector2(0.f, FallingDistance);
+		CurrentPosition += DeltaFallingPosition;
+		FallingTime = 0.f;
+	}
+	
+	Vector2 DeltaPosition = InputXDirection * MovingSpeed * InDeltaSeconds;
+	
+
+	CurrentPosition += DeltaPosition;
+	if (input.IsPressed(InputButton::Space))
+	{
+		CurrentRotation += 90.f;
+	}
 
 }
 
+LinearColor TetrominoColor[5] = {LinearColor::Blue, LinearColor::Green, LinearColor::Red, LinearColor::Yellow, LinearColor::DimGray};
 
+static const float StartX[5][4] = {
+	{ -40.f, -20.f, 0.f, 20.f },
+	{ -30.f, -10.f, -10.f, 10.f },
+	{ -30.f, -10.f, 10.f, 10.f },
+	{ -30.f, -10.f, -10.f, 10.f },
+	{ -20.f, 0.f, 0.f, -20.f }
+};
+
+static const float StartY[5][4] = {
+	{ -10.f, -10.f, -10.f, -10.f },
+	{ -10.f, -10.f, 10.f, -10.f },
+	{ -10.f, -10.f, -10.f, 10.f },
+	{ -20.f, -20.f, 0.f, 0.f },
+	{ -20.f, -20.f, 0.f, 0.f }
+};
 
 void MakeOneSquare(static const float StartX, static const float StartY, static const float SquareLength, std::vector<Vector2>& Square)
 {
@@ -80,21 +116,6 @@ void MakeOneSquare(static const float StartX, static const float StartY, static 
 	}
 }
 
-LinearColor TetrominoColor[5] = {LinearColor::Blue, LinearColor::Green, LinearColor::Red, LinearColor::Yellow, LinearColor::DimGray};
-static const float StartX[5][4] = {
-	{ 0.f, 20.f, 40.f, 60.f },
-	{ 0.f, 20.f, 20.f, 40.f },
-	{ 0.f, 20.f, 40.f, 40.f },
-	{ 0.f, 20.f, 20.f, 40.f },
-	{ 0.f, 20.f, 20.f, 00.f }
-};
-static const float StartY[5][4] = {
-	{ 00.f, 00.f, 00.f, 00.f },
-	{ 00.f, 00.f, 20.f, 00.f },
-	{ 00.f, 00.f, 00.f, 20.f },
-	{ 00.f, 00.f, 20.f, 20.f },
-	{ 00.f, 00.f, 20.f, 20.f }
-};
 int MakeTetromino(static const int mode, std::vector<Vector2>& Square)
 {
 	for (int i = 0; i < 4; ++i)
@@ -116,13 +137,37 @@ void SoftRenderer::Render2D()
 	DrawGizmo2D();
 
 	// 렌더링 로직의 로컬 변수
-	int mode = 4;
+	static std::random_device rd;
+	static std::mt19937 mt(rd());
+	static std::uniform_int_distribution<int> RandomMode(0, 4);
 	std::vector<Vector2> Square;
-	MakeTetromino(mode, Square);
+	MakeTetromino(4, Square);
+	
+	// Translation Matrix
+	Vector3 TranslationBasis1 = Vector3::UnitX;
+	Vector3 TranslationBasis2 = Vector3::UnitY;
+	Vector3 TranslationBasis3 = Vector3(CurrentPosition, 1);
+	Matrix3x3 Translation(TranslationBasis1, TranslationBasis2, TranslationBasis3);
+
+	// Rotation Matrix
+	float sin = 0.f;
+	float cos = 0.f;
+	Math::GetSinCos(sin, cos, CurrentRotation);
+	Vector3 RotationBasis1 = Vector3(cos, sin, 0);
+	Vector3 RotationBasis2 = Vector3(-sin, cos, 0);
+	Vector3 RotationBasis3 = Vector3::UnitZ;
+	Matrix3x3 Rotation(RotationBasis1, RotationBasis2, RotationBasis3);
+
+	// FinalTransform
+	Matrix3x3 FinalTransform = Translation * Rotation;
+
 
 	for (auto v : Square)
 	{
-		r.DrawPoint(v, TetrominoColor[mode]);
+		Vector3 newV(v, 1);
+		Vector3 finalV = FinalTransform * newV;
+
+		r.DrawPoint(finalV.ToVector2(), TetrominoColor[0]);
 	}
 }
 
